@@ -1,0 +1,16 @@
+<div *ngIf="(roadLocations$ | async) as roadLocations">
+  <div *ngIf="!isLoading && !error">
+    <google-map [options]="mapOptions">
+      <div>
+        <map-polyline [path]="roadLocations" [options]="polylineOptions"></map-polyline>
+      </div>
+    </google-map>
+  </div>
+  
+</div>
+<div *ngIf="isLoading" class="loading-container">
+  <h1>Map is loading</h1>
+</div>
+<div *ngIf="!isLoading && error">
+  <h1>{{error}}</h1>
+</div>
