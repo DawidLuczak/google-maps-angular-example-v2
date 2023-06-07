@@ -2,7 +2,7 @@ import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CustomGoogleMapsComponent } from './custom-google-maps.component';
 import { HttpClientJsonpModule, HttpClientModule } from '@angular/common/http';
-import { GoogleMapsModule } from '@angular/google-maps';
+import { GoogleMap, GoogleMapsModule, MapDirectionsRenderer } from '@angular/google-maps';
 
 @NgModule({
   declarations: [CustomGoogleMapsComponent],
@@ -10,8 +10,9 @@ import { GoogleMapsModule } from '@angular/google-maps';
     CommonModule,
     HttpClientModule,
     GoogleMapsModule,
-    HttpClientJsonpModule,
+    HttpClientJsonpModule
   ],
+  providers: [MapDirectionsRenderer, GoogleMap],
   exports: [CustomGoogleMapsComponent],
 })
 export class CustomGoogleMapsModule {}

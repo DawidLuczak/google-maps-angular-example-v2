@@ -1,128 +1,69 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { CustomGoogleMapsService } from './custom-google-maps.service';
-import { Observable, catchError, combineLatest, map, mergeMap, of } from 'rxjs';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ViewChild } from '@angular/core';
+import { Observable, combineLatest, of, take } from 'rxjs';
+import { GoogleMap, MapDirectionsResponse, MapDirectionsService } from '@angular/google-maps';
 import data from 'src/assets/data.json';
-
 
 @Component({
   selector: 'app-custom-google-maps',
   templateUrl: './custom-google-maps.component.html',
   styleUrls: ['./custom-google-maps.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CustomGoogleMapsComponent {
-  private _locationsParameters: string[];
-
-  readonly roadLocations$: Observable<any>;
+export class CustomGoogleMapsComponent implements AfterViewInit {
+  @ViewChild(GoogleMap) googleMap!: GoogleMap;
 
   readonly mapOptions: google.maps.MapOptions;
 
-  readonly polylineOptions: google.maps.PolylineOptions;
-
-  isLoading = true;
-
-  error: any;
-
-  constructor(private _customGoogleMapsService: CustomGoogleMapsService) {
+  constructor(private _mapDirectionsService: MapDirectionsService) {
     this.mapOptions = {
       center: { lat: data[0].lat, lng: data[0].lon },
       zoom: 12,
     };
-
-    this.polylineOptions = {
-      strokeWeight: 1,
-      strokeColor: 'red',
-      strokeOpacity: 1,
-    };
-
-    this._locationsParameters = data.map((v: any) => `${v.lat}%2C${v.lon}`);
-
-    this.roadLocations$ = this._getSnappedPointsAsStrings(this._locationsParameters)
-      .pipe(
-        mergeMap(
-          (data) => this._getRoutes$(data)
-        ),
-        catchError((err) => {
-          this.error = err;
-          console.error(err);
-          return of(err);
-        }),
-      );
   }
-  
-  private _getRoutes$(parameters: string[]) {
-    const observables = [];
 
-    let index = 0;
-    
-    while(index < parameters.length - 11) {
-       observables.push(
-         this._customGoogleMapsService
-          .getDirections(
-            parameters[index],
-            parameters[index + 11],
-            parameters.slice(index + 1, index + 11)
-          )
-       )
-       index += 10;
-    }
-    if (index < parameters.length - 1) {
-      observables.push(
-        this._customGoogleMapsService
-          .getDirections(
-            parameters[index],
-            parameters[parameters.length - 1],
-            parameters.slice(index, parameters.length - 2)
-          )
-      );
-    }
+  ngAfterViewInit(): void {
+    const mapRenderer = new google.maps.DirectionsRenderer({
+      map: this.googleMap.googleMap
+    });
 
-    return combineLatest(
-      observables
-    ).pipe(
-      map((data: google.maps.DirectionsResult[]) => {
-        return data.map((d) => d.routes[0].legs).reduce((legs, current) => {
-          legs.push(...current);
-          return legs;
-        }, []).map((leg) => leg.steps).reduce((steps, current) => {
-          steps.push(...current);
-          return steps
-        }, []).map((step) => {
-          this.isLoading = false;
-          return step.start_location
-        });
-      }),
-      catchError((err) => of(err))
+    const locationsParameters = data.map((object) => ({ lat: object.lat, lng: object.lon }));
+
+    this._getRoutes$(locationsParameters)
+      .pipe(take(1))
+      .subscribe((response: MapDirectionsResponse[]) => {
+        mapRenderer.setDirections(response[0].result!);
+      }
     );
   }
 
-  private _getSnappedPointsAsStrings(parameters: string[]) {
-    this.isLoading = true;
-    this.error = undefined;
-
-    const locationsParameters = [];
-    let index = 0;
-
-    while (index < parameters.length) {
-      locationsParameters.push(
-        parameters.slice(index, index + 10).join('%7C')
-      );
-      index += 10;
+  private _getRoutes$(parameters: google.maps.LatLngLiteral[]) {
+    if (parameters.length < 2) {
+      return of();
     }
 
-    const observables = parameters.map((params) =>
-      this._customGoogleMapsService.snapToRoads(params).pipe(
-        map((data: any) => {
-          return data.snappedPoints.map((v: any) => `${v.location.latitude}%2C${v.location.longitude}`);
-        })
-      )
-    );
+    const requests: Observable<MapDirectionsResponse>[] = [];
+    let i = 0;
 
-    return combineLatest(observables).pipe(
-      map((data) => data.reduce((acc, current) => {
-        acc.push(...current);
-        return acc;
-      }, []))
-    );
+    for (i = 0; i < parameters.length - 10; i += 10) {
+      const requestParameters: google.maps.DirectionsRequest = {
+        origin: parameters[i],
+        destination: parameters[i + 11],
+        waypoints: parameters.slice(i + 1, i + 11).map((value) => ({location: value})),
+        travelMode: google.maps.TravelMode.DRIVING
+      };
+      requests.push(this._mapDirectionsService.route(requestParameters));
+    }
+
+    if (i < parameters.length - 2) {
+      const requestParameters: google.maps.DirectionsRequest = {
+        origin: parameters[i],
+        destination: parameters[parameters.length - 1],
+        waypoints: parameters.slice(i, parameters.length - 1).map((value) => ({location: value})),
+        travelMode: google.maps.TravelMode.DRIVING
+      };
+      requests.push(this._mapDirectionsService.route(requestParameters));
+    }
+
+    return combineLatest(requests);
   }
 }
